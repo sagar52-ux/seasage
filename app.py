@@ -1,669 +1,1005 @@
 import os
+import html
 import requests
 import streamlit as st
 from google import genai
 from google.genai import types
 
-APP_NAME = "SeaSage"
-MODEL_NAME = "gemini-3.1-flash-lite"
-OPEN_METEO_MARINE_URL = "https://marine-api.open-meteo.com/v1/marine"
+# ============================================================
+# SeaSage — a simple AI first mate for first-time sailors
+# ============================================================
 
 st.set_page_config(
-    page_title="SeaSage — Your AI First Mate",
+    page_title="SeaSage — Your First Mate",
     page_icon="⚓",
     layout="wide",
-    initial_sidebar_state="expanded",
 )
+
+# ------------------------- STYLE -----------------------------
 
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@700;800&display=swap');
 
 :root {
-    --deep: #071c2c;
-    --sea: #0e3b52;
-    --mint: #2bb8ad;
-    --pale: #dff4f2;
-    --bg: #f5faf9;
-    --text: #102a3a;
-    --muted: #6b7f8c;
-    --line: #dce8eb;
+  --navy:#062033;
+  --navy2:#0b3046;
+  --teal:#159f98;
+  --teal-light:#e5f6f4;
+  --ink:#17313e;
+  --muted:#687d85;
+  --line:#dbe6e8;
 }
 
-html, body, [class*="css"] { font-family: "DM Sans", sans-serif; }
+html, body, [class*="css"] {
+  font-family:"DM Sans",sans-serif !important;
+}
+
 .stApp {
-    background: radial-gradient(circle at 85% 5%, rgba(43,184,173,.10), transparent 25%),
-                linear-gradient(180deg,#f8fcfc 0%,#eef6f6 100%);
-    color: var(--text);
+  background:linear-gradient(180deg,#fcfefe 0%,#f1f7f6 100%);
+  color:var(--ink);
 }
-.block-container { max-width: 1250px; padding-top: 2rem; padding-bottom: 5rem; }
-h1,h2,h3 { font-family: "Manrope", sans-serif !important; letter-spacing: -.035em; }
+
+.block-container {
+  max-width:1160px;
+  padding-top:2rem;
+  padding-bottom:5rem;
+}
+
+h1,h2,h3,h4 {
+  font-family:"Manrope",sans-serif !important;
+  color:var(--navy) !important;
+  letter-spacing:-.035em;
+}
+
 .hero-title {
-    font-family: "Manrope", sans-serif;
-    font-size: clamp(2.7rem,6vw,5rem);
-    line-height: .96;
-    font-weight: 800;
-    letter-spacing: -.06em;
-    color: var(--deep);
-    margin-bottom: 1rem;
+  font-family:"Manrope",sans-serif;
+  font-size:clamp(3.1rem,7vw,5.7rem);
+  line-height:.93;
+  letter-spacing:-.07em;
+  font-weight:800;
+  color:var(--navy) !important;
+  margin-top:1rem;
 }
-.hero-subtitle { font-size: 1.08rem; line-height: 1.65; max-width: 700px; color: var(--muted); }
+
+.hero-subtitle {
+  max-width:720px;
+  color:var(--muted) !important;
+  font-size:1.08rem;
+  line-height:1.65;
+  margin-top:1rem;
+}
+
 .eyebrow {
-    display:inline-block; background:var(--pale); color:#137b76;
-    border-radius:999px; padding:7px 13px; font-size:.76rem;
-    font-weight:700; letter-spacing:.08em; margin-bottom:1rem;
+  display:inline-block;
+  padding:7px 12px;
+  border-radius:999px;
+  background:var(--teal-light);
+  color:#117d78 !important;
+  font-size:.72rem;
+  font-weight:800;
+  letter-spacing:.1em;
 }
-.sea-card {
-    background:rgba(255,255,255,.94); border:1px solid var(--line);
-    border-radius:20px; padding:1.35rem; box-shadow:0 8px 30px rgba(7,28,44,.05);
-    min-height:145px;
+
+.card {
+  background:#fff;
+  border:1px solid var(--line);
+  border-radius:19px;
+  padding:1.25rem;
+  height:100%;
+  box-shadow:0 7px 25px rgba(6,32,51,.04);
 }
-.sea-card-dark {
-    background:linear-gradient(145deg,#071c2c,#0e3c51);
-    color:white; border-radius:24px; padding:1.7rem;
+
+.card-icon { font-size:1.8rem; margin-bottom:.55rem; }
+.card-title {
+  font-family:"Manrope",sans-serif;
+  font-size:1.05rem;
+  font-weight:800;
+  color:var(--navy) !important;
 }
-.card-icon { font-size:1.8rem; margin-bottom:.5rem; }
-.card-title { font-family:"Manrope"; font-weight:800; font-size:1.05rem; margin-bottom:.35rem; }
-.card-description { color:var(--muted); line-height:1.5; font-size:.9rem; }
+.card-text {
+  color:var(--muted) !important;
+  font-size:.9rem;
+  line-height:1.5;
+  margin-top:.3rem;
+}
+
+.boat-strip {
+  background:linear-gradient(135deg,var(--navy),var(--navy2));
+  border-radius:21px;
+  padding:1.3rem 1.5rem;
+  color:white;
+}
+.boat-strip * { color:white !important; }
+.boat-name {
+  font-family:"Manrope";
+  font-size:1.5rem;
+  font-weight:800;
+}
+.boat-meta { opacity:.75; }
+
+.tip {
+  background:var(--teal-light);
+  border:1px solid #c7e9e5;
+  border-radius:16px;
+  padding:1rem 1.1rem;
+}
+.tip * { color:#174a50 !important; }
+
+.danger {
+  background:#fff1f0;
+  border:1px solid #edc3c0;
+  border-radius:16px;
+  padding:1rem 1.1rem;
+}
+.danger * { color:#6e2926 !important; }
+
 .stButton > button {
-    border-radius:13px; min-height:46px; font-weight:700;
-    border:1px solid var(--line); transition:.18s ease;
+  width:100%;
+  min-height:45px;
+  border-radius:13px;
+  border:1px solid var(--line);
+  background:#fff;
+  color:var(--navy) !important;
+  font-weight:700;
 }
-.stButton > button:hover { transform:translateY(-1px); border-color:var(--mint); }
-section[data-testid="stSidebar"] { background:#071c2c; }
-section[data-testid="stSidebar"] * { color:#edf8f7 !important; }
-section[data-testid="stSidebar"] .stButton > button {
-    background:transparent; border-color:transparent; text-align:left;
+.stButton > button:hover {
+  border-color:var(--teal);
+  color:var(--navy) !important;
+  transform:translateY(-1px);
 }
-section[data-testid="stSidebar"] .stButton > button:hover { background:rgba(255,255,255,.08); }
-.status-pill {
-    display:inline-flex; align-items:center; gap:7px; padding:7px 11px;
-    background:#e4f7f4; color:#157b75; border-radius:999px;
-    font-size:.78rem; font-weight:700;
+.stButton > button[kind="primary"] {
+  background:var(--navy) !important;
+  color:#fff !important;
+  border-color:var(--navy) !important;
 }
-.status-dot { width:8px; height:8px; background:#2bb8ad; border-radius:50%; }
-.metric-card {
-    background:white; border:1px solid var(--line); border-radius:18px;
-    padding:1rem; text-align:center;
+
+.stTextInput input,
+.stTextArea textarea,
+.stNumberInput input {
+  background:#fff !important;
+  color:var(--ink) !important;
+  -webkit-text-fill-color:var(--ink) !important;
 }
-.metric-value { font-family:"Manrope"; font-weight:800; font-size:1.45rem; color:var(--deep); }
-.metric-label { color:var(--muted); font-size:.75rem; margin-top:.25rem; }
-.warning-card {
-    background:#fff8ec; border:1px solid #f0d5a6;
-    border-radius:16px; padding:1rem 1.2rem;
+.stTextInput input::placeholder,
+.stTextArea textarea::placeholder {
+  color:#82939a !important;
+  opacity:1 !important;
 }
-.emergency-banner {
-    background:linear-gradient(135deg,#5e1818,#9e2e2e);
-    color:white; border-radius:22px; padding:1.6rem;
-    margin-bottom:1.2rem;
+[data-baseweb="select"] > div,
+[data-baseweb="input"] > div,
+[data-baseweb="textarea"] > div {
+  background:#fff !important;
+  border-color:var(--line) !important;
 }
-.emergency-banner h1 { color:white !important; }
-[data-testid="stChatMessage"] { border-radius:18px; }
-@media(max-width:800px) {
-    .block-container { padding-left:1rem; padding-right:1rem; }
-    .hero-title { font-size:3rem; }
+[data-baseweb="select"] * { color:var(--ink) !important; }
+
+.stChatMessage {
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:rgba(255,255,255,.9);
+}
+[data-testid="stChatMessage"] p,
+[data-testid="stChatMessage"] li,
+[data-testid="stChatMessage"] strong,
+[data-testid="stChatMessage"] em {
+  color:var(--ink) !important;
+}
+[data-testid="stChatInput"] textarea {
+  color:var(--ink) !important;
+  background:#fff !important;
+  -webkit-text-fill-color:var(--ink) !important;
+}
+
+.small {
+  font-size:.78rem;
+  color:var(--muted) !important;
+}
+
+@media(max-width:700px) {
+  .block-container { padding-left:1rem; padding-right:1rem; }
+  .hero-title { font-size:3.2rem; }
 }
 </style>
 """, unsafe_allow_html=True)
 
-DEFAULT_PROFILE = {"name": "", "experience": "", "goal": "", "boat_status": "Not bought yet"}
-DEFAULT_BOAT = {"name": "", "type": "", "make_model": "", "length": "", "year": "", "engine": "", "location": "", "notes": ""}
+# ------------------------- STATE -----------------------------
 
-for key, value in {
-    "profile": DEFAULT_PROFILE.copy(),
-    "boat": DEFAULT_BOAT.copy(),
-    "messages": [],
-    "mode": "home",
-    "onboarding_complete": False,
-    "marine_data": None,
-}.items():
-    if key not in st.session_state:
-        st.session_state[key] = value
+DEFAULT_BOAT = {
+    "name":"",
+    "type":"",
+    "make_model":"",
+    "year":"",
+    "length":"",
+    "engine":"",
+    "engine_hours":"",
+    "location":"",
+    "notes":"",
+}
 
-def get_api_key():
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+if "boat" not in st.session_state:
+    st.session_state.boat = DEFAULT_BOAT.copy()
+if "messages" not in st.session_state:
+    st.session_state.messages = []
+if "pending_prompt" not in st.session_state:
+    st.session_state.pending_prompt = None
+if "marine" not in st.session_state:
+    st.session_state.marine = None
+
+# ------------------------- GEMINI ----------------------------
+
+def get_key():
     try:
-        if "GEMINI_API_KEY" in st.secrets:
-            return st.secrets["GEMINI_API_KEY"]
+        key = st.secrets.get("GEMINI_API_KEY")
+        if key:
+            return key
     except Exception:
         pass
-    return os.environ.get("GEMINI_API_KEY")
+    return os.getenv("GEMINI_API_KEY")
 
-API_KEY = get_api_key()
-client = None
-if API_KEY:
+API_KEY = get_key()
+
+if not API_KEY:
+    st.error("SeaSage needs GEMINI_API_KEY in Streamlit Secrets.")
+    st.stop()
+
+@st.cache_resource
+def make_client(key):
+    return genai.Client(api_key=key)
+
+client = make_client(API_KEY)
+
+@st.cache_resource
+def choose_model(key):
+    c = genai.Client(api_key=key)
+    preferred = [
+        "gemini-3.1-flash-lite",
+        "gemini-3-flash",
+        "gemini-2.5-flash-lite",
+        "gemini-2.5-flash",
+    ]
     try:
-        client = genai.Client(api_key=API_KEY)
-    except Exception as exc:
-        st.error(f"Could not initialise SeaSage AI: {exc}")
+        available = []
+        for m in c.models.list():
+            name = getattr(m, "name", "")
+            actions = getattr(m, "supported_actions", []) or []
+            if name and ("generateContent" in actions or not actions):
+                available.append(name.replace("models/",""))
+        for wanted in preferred:
+            if wanted in available:
+                return wanted
+        if available:
+            return available[0]
+    except Exception:
+        pass
+    return "gemini-2.5-flash"
 
-SYSTEM_PROMPT = """
-You are SeaSage, an AI first mate and mentor for people new to boating,
-sailing, boat ownership and living aboard.
+MODEL = choose_model(API_KEY)
 
-The user may know almost nothing about boats. Never assume nautical knowledge.
-Your job is not merely to answer questions. Help the user understand what is
-happening, decide what to do next, and learn enough to become more independent.
+# ------------------------- BRAIN -----------------------------
 
-PERSONALITY:
-- Calm, patient, practical and reassuring without false reassurance.
-- Experienced-sailor energy without pretending to be a human sailor.
-- Never condescending.
-- Explain jargon immediately.
-- Prefer short actionable steps over walls of text.
+BRAIN = """
+You are SeaSage, an experienced sailor, boat owner, repair mentor and patient
+first mate. Your user may be a complete beginner.
 
-For practical problems:
-1. Briefly explain what may be happening.
-2. Give the safest immediate action.
-3. Give a short numbered checklist.
-4. Ask one useful follow-up question if necessary.
-5. Say when to stop and get a qualified professional.
+Your job is to help the user understand, maintain, troubleshoot, repair and use
+their own boat. You are hands-on. You do NOT automatically tell people to hire
+a professional.
 
-For troubleshooting, start with safe observations. Never tell a beginner to
-randomly dismantle equipment. Do not instruct dangerous mechanical, electrical,
-fuel, gas, rigging or other hazardous work beyond safe basic checks.
+The user is allowed to open things, remove panels, test components, clean parts,
+replace parts and learn by doing. Help them do it intelligently.
 
-For fire, flooding, gas, fuel, electrical systems, batteries, propulsion,
-steering, rigging under load, severe weather, person overboard or medical
-emergencies, prioritise immediate safety and appropriate emergency/maritime
-assistance.
+CORE STYLE
+- Talk like an experienced friend standing beside the boat.
+- Plain English first; explain nautical terms as they appear.
+- Never make the user feel stupid.
+- Don't drown simple questions in warnings.
+- Don't give a giant list when one next step will do.
+- Diagnose before guessing at a replacement part.
+- Ask for a photo whenever seeing the component would materially help.
+- Remember what the user already checked.
+- Explain WHY a step matters.
 
-You are not a substitute for emergency services, qualified marine engineers,
-professional boat surveyors, licensed skippers, official nautical charts,
-official warnings or local maritime authorities.
+REPAIR FLOW
+For a repair/troubleshooting question:
+1. Say what you think may be happening.
+2. Ask or give the single best next check.
+3. Tell the user exactly what to look for.
+4. Explain what each possible result means.
+5. Continue one step at a time.
+6. Once the fault is narrowed down, give the repair procedure.
+7. Give tools/parts needed and how to test the repair afterwards.
 
-Marine forecasts are informational. Do not present forecast data as certainty
-and do not replace official navigation information.
+When useful, structure as:
+WHAT I THINK
+CHECK THIS FIRST
+WHAT YOU SHOULD SEE
+WHAT THAT TELLS US
+NEXT STEP
 
-For boat buying, consider intended use, location, experience, budget, survey,
-engine, rigging, electrical, plumbing, safety, insurance and total ownership
-cost. Encourage a professional marine survey before purchase.
+HANDS-ON REPAIR
+When a user wants to open something:
+- Tell them what the component probably is and what it does.
+- Tell them what to photograph before disassembly.
+- Suggest labelling wires/hoses if useful.
+- Tell them what tools are likely needed.
+- Explain what to isolate first.
+- Explain what they should expect to see.
+- Help them decide what can be cleaned, adjusted, tested, repaired or replaced.
+- If they get stuck, ask for a photo rather than guessing.
 
-For image analysis, identify only what the image supports. Clearly distinguish
-confidence from uncertainty. Never encourage touching hazardous equipment just
-to investigate.
+Do not be unnecessarily restrictive. A novice can learn a lot by doing.
 
-Emergency mode: be concise, action-oriented and ask only critical questions.
+SAFETY BOUNDARIES
+Be sensible, not alarmist.
+- Never advise bypassing a fuse, breaker or safety device.
+- Explain isolation before electrical work.
+- Treat shore/mains electricity with appropriate caution.
+- Treat fuel/gas as ignition-sensitive.
+- Warn about moving belts/fans and hot engines.
+- For heavy components, mention proper support.
+- For rigging aloft, explain equipment and technique boundaries.
+If something is genuinely dangerous, explain the specific danger and offer the
+safest way to continue learning.
 
-Always adapt to the user's experience level. If they are a complete beginner,
-explain terminology from scratch. When information is missing, ask a focused
-question rather than inventing facts.
+EXPERTISE
+
+ENGINE:
+Think about fuel, air, compression, starting power, cooling, lubrication,
+exhaust and transmission. For overheating, consider raw-water flow, coolant,
+pump/belt, exhaust restriction and heat exchanger. Teach simple checks first.
+
+ELECTRICAL:
+Use the model:
+source -> protection -> distribution -> switch -> load -> return.
+Teach batteries, fuses, breakers, switches, grounds/negative, charging sources
+and multimeter testing progressively.
+
+BILGE/WATER:
+Ask whether the water is rising and whether it is salt, fresh, coolant, fuel
+or unknown. Think about seacocks, hoses, shaft/packing, deck leaks, freshwater,
+cooling-water leaks and pumps.
+
+PLUMBING:
+Follow the water path from tank/source -> pump -> hose -> fixture -> drain.
+Help users inspect clamps, hoses, pumps, filters and tanks.
+
+ANCHORING:
+Explain anchor, rode, chain, rope, scope, bottom type, setting, holding,
+snubber and swing room. Scope is a ratio, not a magic number.
+
+NAVIGATION:
+GPS is a position source, not the entire navigation system. Teach charts,
+compass, depth, visual references, lookout and redundancy.
+
+WEATHER:
+Explain wind, waves, swell, period and current. Never call a trip safe from
+one number. Current official forecasts and warnings are needed for real trips.
+
+BUYING:
+Look at hull/deck/structure, engine, rigging, electrical, plumbing,
+through-hulls/seacocks, steering, ground tackle, electronics, safety gear,
+maintenance history and survey/sea trial. A cheap boat may have expensive
+deferred maintenance.
+
+LIVEABOARD:
+Think water, power, food, waste, ventilation, condensation, spares,
+communications, weather and routine maintenance.
+
+DO NOT INVENT:
+Never invent the user's boat specifications, wiring, engine model, component
+identity or current weather. If exact information matters, ask for a photo,
+model number, manual or measurement.
+
+CURRENT BOAT PROFILE:
+{boat}
 """
 
-def profile_context():
-    p, b = st.session_state.profile, st.session_state.boat
-    return f"""
-USER:
-Name: {p.get("name") or "Not provided"}
-Experience: {p.get("experience") or "Not provided"}
-Goal: {p.get("goal") or "Not provided"}
-Boat status: {p.get("boat_status") or "Not provided"}
+def boat_context():
+    b = st.session_state.boat
+    return "\n".join([
+        f"Name: {b.get('name') or 'unknown'}",
+        f"Type: {b.get('type') or 'unknown'}",
+        f"Make/model: {b.get('make_model') or 'unknown'}",
+        f"Year: {b.get('year') or 'unknown'}",
+        f"Length: {b.get('length') or 'unknown'}",
+        f"Engine: {b.get('engine') or 'unknown'}",
+        f"Engine hours: {b.get('engine_hours') or 'unknown'}",
+        f"Location: {b.get('location') or 'unknown'}",
+        f"Notes: {b.get('notes') or 'unknown'}",
+    ])
 
-BOAT:
-Name: {b.get("name") or "Not provided"}
-Type: {b.get("type") or "Not provided"}
-Make/model: {b.get("make_model") or "Not provided"}
-Length: {b.get("length") or "Not provided"}
-Year: {b.get("year") or "Not provided"}
-Engine: {b.get("engine") or "Not provided"}
-Location: {b.get("location") or "Not provided"}
-Notes: {b.get("notes") or "Not provided"}
-"""
+def prompt_for(question):
+    return BRAIN.format(boat=boat_context())
 
-def mode_instruction(mode):
-    return {
-        "chat": "Normal first-mate mode. Help with whatever the user needs.",
-        "buy": "Help a first-time boat buyer. Be cautious and practical.",
-        "fix": "Guide troubleshooting progressively, starting with safe observations.",
-        "trip": "Help plan a trip considering boat capability, crew, weather, fuel, water, provisions, navigation and contingencies.",
-        "learn": "Teach a complete beginner progressively, using simple analogies.",
-        "emergency": "EMERGENCY MODE. Prioritise immediate safety and appropriate emergency or maritime assistance. Keep responses concise.",
-    }.get(mode, "Normal first-mate mode.")
-
-def build_contents(user_text, image_bytes=None, mime_type=None):
+def generate(question, image=None, mime=None):
     contents = []
-    for message in st.session_state.messages[-16:]:
-        contents.append(types.Content(
-            role="user" if message["role"] == "user" else "model",
-            parts=[types.Part.from_text(text=message["content"])]
+
+    for msg in st.session_state.messages[-12:]:
+        contents.append(
+            types.Content(
+                role="user" if msg["role"] == "user" else "model",
+                parts=[types.Part.from_text(text=msg["content"])],
+            )
+        )
+
+    parts = [
+        types.Part.from_text(
+            text=(
+                "User's current question:\n"
+                + question
+                + "\n\n"
+                "Use the boat profile. If this is a repair problem, work "
+                "step-by-step and ask for the most useful next observation."
+            )
+        )
+    ]
+
+    if image:
+        parts.append(types.Part.from_bytes(
+            data=image,
+            mime_type=mime or "image/jpeg",
         ))
-    parts = [types.Part.from_text(text=f"""
-APPLICATION CONTEXT:
-{profile_context()}
 
-CURRENT MODE:
-{st.session_state.mode}
-
-MODE INSTRUCTIONS:
-{mode_instruction(st.session_state.mode)}
-
-USER MESSAGE:
-{user_text}
-""")]
-    if image_bytes:
-        parts.append(types.Part.from_bytes(data=image_bytes, mime_type=mime_type or "image/jpeg"))
     contents.append(types.Content(role="user", parts=parts))
-    return contents
 
-def ask_seasage(user_text, image_bytes=None, mime_type=None):
-    if not client:
-        return "I’m ready to come aboard, but my AI connection isn't configured yet. Please add `GEMINI_API_KEY` to Streamlit Secrets."
     try:
         response = client.models.generate_content(
-            model=MODEL_NAME,
-            contents=build_contents(user_text, image_bytes, mime_type),
+            model=MODEL,
+            contents=contents,
             config=types.GenerateContentConfig(
-                system_instruction=SYSTEM_PROMPT,
-                max_output_tokens=1800,
+                system_instruction=prompt_for(question),
+                temperature=0.55,
+                max_output_tokens=2200,
             ),
         )
-        return (response.text or "I couldn't generate a useful response just now. Try again.").strip()
-    except Exception as exc:
-        error = str(exc)
-        if "404" in error or "not found" in error.lower():
-            return f"SeaSage couldn't reach the configured Gemini model `{MODEL_NAME}`. Check that your API key has access to this model."
-        if "429" in error or "quota" in error.lower():
-            return "I've hit the current Gemini usage limit. Please wait a little and try again."
-        return f"SeaSage hit a connection error: {error}"
+        answer = (response.text or "").strip()
+        return answer or "I didn't get a useful answer. Try telling me one more detail."
+    except Exception as e:
+        msg = str(e)
+        if "404" in msg or "not found" in msg.lower():
+            return (
+                f"I can't access Gemini model `{MODEL}` with this API key. "
+                "Restart the Streamlit app so SeaSage can refresh the available models."
+            )
+        if "429" in msg or "quota" in msg.lower():
+            return "Gemini's free quota/rate limit has been reached for the moment. Try again shortly."
+        return f"SeaSage hit an AI connection error: {msg}"
 
-def add_message(role, content):
-    st.session_state.messages.append({"role": role, "content": content})
+def ask(question, image=None, mime=None):
+    st.session_state.messages.append({"role":"user","content":question})
+    with st.chat_message("user", avatar="🧑‍✈️"):
+        st.markdown(question)
+        if image:
+            st.image(image, use_container_width=True)
 
-def start_conversation(prompt, mode="chat"):
-    st.session_state.mode = mode
-    add_message("user", prompt)
-    add_message("assistant", ask_seasage(prompt))
+    with st.chat_message("assistant", avatar="⚓"):
+        with st.spinner("SeaSage is thinking..."):
+            answer = generate(question, image, mime)
+        st.markdown(answer)
+
+    st.session_state.messages.append({"role":"assistant","content":answer})
+
+def open_prompt(question):
+    st.session_state.pending_prompt = question
+    st.session_state.page = "chat"
     st.rerun()
 
-@st.cache_data(ttl=900)
-def get_marine_data(latitude, longitude):
-    params = {
-        "latitude": latitude,
-        "longitude": longitude,
-        "current": "wave_height,wave_direction,wave_period,swell_wave_height,swell_wave_direction,ocean_current_velocity,ocean_current_direction,sea_surface_temperature",
-        "forecast_days": 3,
-        "timezone": "auto",
-    }
-    response = requests.get(OPEN_METEO_MARINE_URL, params=params, timeout=15)
-    response.raise_for_status()
-    return response.json()
+def esc(value):
+    return html.escape(str(value or ""))
 
-def marine_context(data):
-    c = data.get("current", {})
-    return f"""
-Wave height: {c.get("wave_height", "N/A")} m
-Wave direction: {c.get("wave_direction", "N/A")}°
-Wave period: {c.get("wave_period", "N/A")} s
-Swell height: {c.get("swell_wave_height", "N/A")} m
-Current speed: {c.get("ocean_current_velocity", "N/A")} km/h
-Current direction: {c.get("ocean_current_direction", "N/A")}°
-Sea temperature: {c.get("sea_surface_temperature", "N/A")} °C
-"""
+# ------------------------- NAV -------------------------------
 
-with st.sidebar:
-    st.markdown("""
-    <div style="padding:.6rem 0 1.3rem">
-        <div style="font-size:2rem">⚓</div>
-        <div style="font-family:Manrope;font-weight:800;font-size:1.35rem">SeaSage</div>
-        <div style="font-size:.8rem;opacity:.7">Your AI First Mate</div>
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown("### Navigate")
-    nav = [
-        ("⌂  Home", "home"), ("💬  Ask SeaSage", "chat"),
-        ("🛥️  My Boat", "boat"), ("🔧  Fix Something", "fix"),
-        ("🧭  Plan a Trip", "trip"), ("🌊  Check the Sea", "sea"),
-        ("🎓  Teach Me", "learn"), ("🚨  Emergency", "emergency"),
-    ]
-    for label, mode in nav:
-        if st.button(label, use_container_width=True, key=f"nav_{mode}"):
-            st.session_state.mode = mode
+def nav():
+    with st.sidebar:
+        st.markdown("## ⚓ SeaSage")
+        st.caption("Your AI first mate")
+        st.markdown("---")
+
+        items = [
+            ("⌂ Home","home"),
+            ("⚓ Ask SeaSage","chat"),
+            ("🔧 Fix something","fix"),
+            ("🛥️ My boat","boat"),
+            ("🧭 Go somewhere","trip"),
+            ("🎓 Learn","learn"),
+        ]
+
+        for label, page in items:
+            if st.button(label, key="nav_"+page):
+                st.session_state.page = page
+                st.rerun()
+
+        st.markdown("---")
+
+        if st.button("🚨 Emergency", key="nav_emergency"):
+            st.session_state.page = "emergency"
             st.rerun()
-    st.markdown("---")
-    p, b = st.session_state.profile, st.session_state.boat
-    st.markdown("### Your profile")
-    st.caption(f"👤 {p['name'] or 'Sailor profile not complete'}")
-    st.caption(f"🎓 {p['experience'] or 'Experience not set'}")
-    st.caption(f"🛥️ {b['name'] or b['make_model'] or 'Boat not added'}")
-    st.markdown("---")
-    if st.button("↻  Start fresh", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.mode = "home"
-        st.session_state.marine_data = None
-        st.rerun()
-    st.markdown('<div style="font-size:.7rem;opacity:.55;margin-top:1rem">SeaSage is an AI guide, not a substitute for official navigation, emergency services or qualified marine professionals.</div>', unsafe_allow_html=True)
 
-def onboarding():
-    st.markdown('<div class="eyebrow">WELCOME ABOARD</div>', unsafe_allow_html=True)
-    st.markdown("<div class=\"hero-title\">Let’s get to know<br>the sailor.</div>", unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">SeaSage gets more useful as it learns about you. This takes about a minute.</div>', unsafe_allow_html=True)
-    st.write("")
-    with st.form("onboarding_form"):
-        name = st.text_input("What should SeaSage call you?", placeholder="e.g. Sagar")
-        experiences = ["", "I've never sailed", "I've been on boats but never sailed myself", "I'm comfortable with the basics", "I'm an experienced sailor"]
-        goals = ["", "Buy my first boat", "Weekend trips", "Longer passages", "Live aboard", "Cruise around the coast", "I'm still figuring it out"]
-        statuses = ["Not bought yet", "Researching boats", "About to buy", "I own a boat", "I live aboard"]
-        experience = st.selectbox("How much boating experience do you have?", experiences)
-        goal = st.selectbox("What are you hoping to do?", goals)
-        boat_status = st.selectbox("Where are you in your boat journey?", statuses)
-        if st.form_submit_button("Come aboard →", use_container_width=True):
-            st.session_state.profile = {"name": name.strip(), "experience": experience, "goal": goal, "boat_status": boat_status}
-            st.session_state.onboarding_complete = True
-            greeting = f"Welcome aboard{', ' + name.strip() if name.strip() else ''}. I'm SeaSage. I’ll help you learn the boat, understand what's happening around you, and figure out what to do next."
-            st.session_state.messages = [{"role": "assistant", "content": greeting}]
-            st.session_state.mode = "home"
+        if st.button("＋ New conversation", key="new_chat"):
+            st.session_state.messages = []
+            st.session_state.page = "chat"
             st.rerun()
+
+        b = st.session_state.boat
+        if b.get("name") or b.get("make_model"):
+            st.markdown("---")
+            st.caption("MY BOAT")
+            st.markdown(
+                f"**{esc(b.get('name') or b.get('make_model'))}**",
+                unsafe_allow_html=True,
+            )
+            st.caption(
+                f"{b.get('type') or 'Boat'} · {b.get('length') or '?'}"
+            )
+
+# ------------------------- HOME ------------------------------
 
 def home():
-    p, b = st.session_state.profile, st.session_state.boat
-    greeting = f"Good to see you, {p['name']}." if p["name"] else "Welcome aboard."
-    st.markdown('<div class="eyebrow">⚓ YOUR FIRST MATE</div>', unsafe_allow_html=True)
-    st.markdown(f"<div class=\"hero-title\">{greeting}<br>What are we doing today?</div>", unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">Ask questions, learn your boat, troubleshoot problems, understand the sea, or let SeaSage walk you through something step by step.</div>', unsafe_allow_html=True)
+    b = st.session_state.boat
+    label = b.get("name") or b.get("make_model")
+
+    st.markdown('<div class="eyebrow">⚓ YOUR AI FIRST MATE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title">Your boat.<br>Your questions.<br>Your first mate.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">You don’t need to know the nautical words. Tell SeaSage what you see, hear, smell, feel or want to do — and we’ll figure it out together.</div>',
+        unsafe_allow_html=True,
+    )
+
     st.write("")
-    actions = [
-        ("🛥️", "I'm buying a boat", "Compare boats, inspect listings and understand ownership costs.", "buy"),
-        ("🔧", "I need to fix something", "Tell me what's wrong or show me a photo.", "fix"),
-        ("🧭", "I'm planning a trip", "Prepare the boat, crew, route and departure checklist.", "trip"),
-        ("🌊", "Check the sea", "Look at marine conditions and understand what they mean.", "sea"),
-        ("🎓", "Teach me", "Learn boating from zero without drowning in jargon.", "learn"),
-        ("🚨", "Something is wrong", "Enter emergency mode and focus on immediate safety.", "emergency"),
+    st.markdown("### What do you need?")
+
+    cards = [
+        ("🔧","Fix something","Something isn't working? Diagnose it together.","fix"),
+        ("🛥️","Understand my boat","Find parts, learn systems and understand what you're looking at.","boat"),
+        ("🧭","I'm going somewhere","Prepare the boat, crew, route and departure.","trip"),
+        ("🎓","Teach me","Learn engines, electrics, sailing, anchoring and more.","learn"),
     ]
-    cols = st.columns(3)
-    for i, (icon, title, description, mode) in enumerate(actions):
-        with cols[i % 3]:
-            st.markdown(f'<div class="sea-card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-description">{description}</div></div>', unsafe_allow_html=True)
-            if st.button("Open →", key=f"home_{mode}", use_container_width=True):
-                st.session_state.mode = mode
-                st.rerun()
-        if i % 3 == 2:
-            st.write("")
-    st.write("")
-    st.markdown("### Or just tell me what’s on your mind.")
-    prompts = [
-        "I know nothing about boats. Where should I start?",
-        "What should I check before buying a used sailboat?",
-        "Teach me the 10 things every first-time boat owner should know.",
-    ]
-    cols = st.columns(3)
-    for i, prompt in enumerate(prompts):
+
+    cols = st.columns(4)
+
+    for i, (icon,title,desc,page) in enumerate(cards):
         with cols[i]:
-            if st.button(prompt, key=f"quick_{i}", use_container_width=True):
-                start_conversation(prompt)
-    if b["name"] or b["make_model"]:
-        st.write("")
-        st.markdown("### Your boat")
-        label = b["name"] or b["make_model"]
-        st.markdown(f'<div class="sea-card-dark"><div style="font-size:.75rem;opacity:.65;letter-spacing:.1em">MY BOAT</div><div style="font-family:Manrope;font-size:1.8rem;font-weight:800;margin-top:.4rem">{label}</div><div style="opacity:.75">{b["type"] or "Boat type not set"} {"· " + b["length"] if b["length"] else ""} {"· " + b["year"] if b["year"] else ""}</div></div>', unsafe_allow_html=True)
+            st.markdown(
+                f'<div class="card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-text">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Open →", key="home_"+page, type="primary"):
+                st.session_state.page = page
+                st.rerun()
 
-def boat_page():
-    st.markdown('<div class="eyebrow">MY BOAT</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-title" style="font-size:3.4rem">Know your boat.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">The more SeaSage knows about your boat, the more specific its advice becomes.</div>', unsafe_allow_html=True)
     st.write("")
-    with st.form("boat_form"):
-        c1, c2 = st.columns(2)
-        with c1:
-            name = st.text_input("Boat name", value=st.session_state.boat["name"], placeholder="e.g. Wanderer")
-            types_list = ["", "Monohull sailboat", "Catamaran", "Motorboat", "Trawler", "Trimaran", "Other"]
-            current_type = st.session_state.boat["type"]
-            boat_type = st.selectbox("Boat type", types_list, index=types_list.index(current_type) if current_type in types_list else 0)
-            make_model = st.text_input("Make / model", value=st.session_state.boat["make_model"], placeholder="e.g. Beneteau Oceanis 35")
-            length = st.text_input("Length", value=st.session_state.boat["length"], placeholder="e.g. 35 ft")
-        with c2:
-            year = st.text_input("Year", value=st.session_state.boat["year"], placeholder="e.g. 2014")
-            engine = st.text_input("Engine", value=st.session_state.boat["engine"], placeholder="e.g. Yanmar diesel")
-            location = st.text_input("Usual location", value=st.session_state.boat["location"], placeholder="e.g. Goa, India")
-            notes = st.text_area("Anything else SeaSage should know?", value=st.session_state.boat["notes"], placeholder="Known issues, equipment, plans, etc.")
-        if st.form_submit_button("Save boat profile", use_container_width=True):
-            st.session_state.boat = {"name": name.strip(), "type": boat_type, "make_model": make_model.strip(), "length": length.strip(), "year": year.strip(), "engine": engine.strip(), "location": location.strip(), "notes": notes.strip()}
-            st.success("Boat profile saved. SeaSage will use it in future conversations.")
-    st.write("")
-    st.markdown("### Learn your boat's systems")
-    systems = [
-        ("🔋", "Electrical", "Batteries, charging, shore power and panels"),
-        ("🛢️", "Engine", "Cooling, fuel, oil and basic checks"),
-        ("💧", "Water", "Tanks, pumps, plumbing and freshwater"),
-        ("⚓", "Anchoring", "Anchor, rode, scope and holding"),
-        ("⛵", "Rigging", "Mast, boom, lines and standing rigging"),
-        ("🧭", "Navigation", "Charts, instruments, compass and position"),
-        ("🚽", "Sanitation", "Toilets, holding tanks and waste systems"),
-        ("🛟", "Safety", "PFDs, flares, fire equipment and emergency gear"),
+
+    if label:
+        st.markdown(
+            f"""
+            <div class="boat-strip">
+                <div class="small">MY BOAT</div>
+                <div class="boat-name">{esc(label)}</div>
+                <div class="boat-meta">
+                    {esc(b.get('type') or 'Boat')} ·
+                    {esc(b.get('length') or 'Length unknown')} ·
+                    {esc(b.get('year') or 'Year unknown')}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        st.write("")
+
+    st.markdown("### Or just ask me")
+
+    examples = [
+        "I know nothing about boats. Where do I start?",
+        "What is this thing under my engine?",
+        "My bilge pump keeps running.",
+        "Can I change my engine oil myself?",
     ]
+
     cols = st.columns(4)
-    for i, (icon, title, description) in enumerate(systems):
-        with cols[i % 4]:
-            st.markdown(f'<div class="sea-card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-description">{description}</div></div>', unsafe_allow_html=True)
-            if st.button("Learn →", key=f"system_{i}", use_container_width=True):
-                start_conversation(f"Teach me about the {title.lower()} system on my boat. Assume I'm a first-time boat owner. Start from the basics and tell me what I should know and regularly check.")
+    for i, text in enumerate(examples):
+        with cols[i]:
+            if st.button(text, key=f"example_{i}"):
+                open_prompt(text)
 
-def fix_page():
-    st.markdown('<div class="eyebrow">TROUBLESHOOTING</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-title" style="font-size:3.5rem">Something’s wrong.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">Don’t worry. We’ll work through it one observation at a time. If you can, take a photo of what you’re seeing.</div>', unsafe_allow_html=True)
-    st.write("")
-    categories = [
-        ("💧", "Water / bilge", "Water where it shouldn't be"),
-        ("🔥", "Heat / smoke", "Something is hot, smoking or burning"),
-        ("⚡", "Electrical", "Power, battery or wiring problem"),
-        ("🛢️", "Engine", "Engine won't start, overheats or sounds wrong"),
-        ("⛵", "Rigging", "Mast, lines, sails or rigging issue"),
-        ("🚽", "Plumbing", "Toilet, pump, tank or freshwater issue"),
-        ("🧭", "Navigation", "Instrument or navigation problem"),
-        ("❓", "I don't know", "I can't identify the problem"),
-    ]
-    cols = st.columns(4)
-    for i, (icon, title, description) in enumerate(categories):
-        with cols[i % 4]:
-            st.markdown(f'<div class="sea-card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-description">{description}</div></div>', unsafe_allow_html=True)
-            if st.button("Start →", key=f"fix_{i}", use_container_width=True):
-                start_conversation(f"I have a {title.lower()} problem on my boat. Help me troubleshoot it step by step. Assume I'm a beginner and prioritise safety.", "fix")
-    st.write("")
-    st.markdown("### 📷 Show me")
-    uploaded = st.file_uploader("Upload a photo of the problem", type=["jpg", "jpeg", "png", "webp"])
-    camera = st.camera_input("Or take a photo")
-    image = camera if camera is not None else uploaded
-    if image:
-        image_bytes = image.getvalue()
-        mime_type = image.type or "image/jpeg"
-        st.image(image_bytes, caption="Photo for SeaSage", use_container_width=True)
-        question = st.text_input("What would you like me to look at?", placeholder="e.g. What is this component? Does anything look wrong?")
-        if st.button("🔍 Ask SeaSage about this photo", use_container_width=True):
-            question = question.strip() or "Look at this photo. What am I probably looking at? Explain it to a complete beginner, tell me what you can identify with confidence, what you cannot identify, and what I should safely check next."
-            with st.spinner("SeaSage is looking closely..."):
-                answer = ask_seasage(question, image_bytes, mime_type)
-            add_message("user", question)
-            add_message("assistant", answer)
-            st.session_state.mode = "chat"
-            st.rerun()
-
-def trip_page():
-    st.markdown('<div class="eyebrow">PASSAGE PLANNER</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-title" style="font-size:3.5rem">Where are we going?</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">SeaSage will help you think through the trip before you leave.</div>', unsafe_allow_html=True)
-    st.write("")
-    c1, c2 = st.columns(2)
-    with c1:
-        departure = st.text_input("Departure", placeholder="e.g. Goa")
-        destination = st.text_input("Destination", placeholder="e.g. Gokarna")
-        distance = st.text_input("Approximate distance", placeholder="e.g. 80 nautical miles")
-    with c2:
-        departure_time = st.text_input("Planned departure", placeholder="e.g. Tomorrow at 06:00")
-        crew = st.text_input("Who is coming?", placeholder="e.g. Me + 2 friends")
-        crew_experience = st.selectbox("Crew experience", ["Mostly beginners", "Some sailing experience", "Experienced crew"])
-    notes = st.text_area("Anything else?", placeholder="Boat limitations, weather concerns, fuel range, etc.")
-    if st.button("🧭 Build my pre-departure plan", use_container_width=True):
-        prompt = f"""Help me plan this trip as a first-time sailor.
-Departure: {departure}
-Destination: {destination}
-Approximate distance: {distance}
-Planned departure: {departure_time}
-Crew: {crew}
-Crew experience: {crew_experience}
-Additional information: {notes}
-Create a practical pre-departure plan covering boat readiness, fuel and water,
-safety equipment, weather and sea-state information, navigation, communications,
-food/provisions, crew briefing, reasons to postpone and final checks.
-Do not pretend to know current weather unless current marine data is supplied."""
-        start_conversation(prompt, "trip")
-
-def sea_page():
-    st.markdown('<div class="eyebrow">THE SEA</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-title" style="font-size:3.5rem">What’s happening out there?</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">Enter your approximate position to see marine conditions.</div>', unsafe_allow_html=True)
-    st.write("")
-    c1, c2, c3 = st.columns([1, 1, 1])
-    with c1:
-        latitude = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=15.49, step=.01, format="%.2f")
-    with c2:
-        longitude = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=73.83, step=.01, format="%.2f")
-    with c3:
-        st.write("")
-        st.write("")
-        if st.button("🌊 Check conditions", use_container_width=True):
-            try:
-                with st.spinner("Reading the sea..."):
-                    st.session_state.marine_data = get_marine_data(latitude, longitude)
-            except Exception as exc:
-                st.error(f"Couldn't retrieve marine conditions right now: {exc}")
-    data = st.session_state.marine_data
-    if data:
-        c = data.get("current", {})
-        metrics = [
-            ("🌊", c.get("wave_height"), "Wave height", "m"),
-            ("⏱️", c.get("wave_period"), "Wave period", "sec"),
-            ("〰️", c.get("swell_wave_height"), "Swell", "m"),
-            ("🌡️", c.get("sea_surface_temperature"), "Sea temperature", "°C"),
-        ]
-        st.write("")
-        cols = st.columns(4)
-        for i, (icon, value, label, unit) in enumerate(metrics):
-            with cols[i]:
-                display = "—" if value is None else f"{value} {unit}"
-                st.markdown(f'<div class="metric-card"><div>{icon}</div><div class="metric-value">{display}</div><div class="metric-label">{label}</div></div>', unsafe_allow_html=True)
-        st.write("")
-        st.markdown('<div class="warning-card"><strong>Important:</strong> Marine forecasts are useful for planning and understanding conditions, but they do not replace official navigation information, charts, local warnings or professional judgement.</div>', unsafe_allow_html=True)
-        st.write("")
-        if st.button("💬 Explain these conditions to me", use_container_width=True):
-            prompt = f"""Explain these marine conditions to a first-time sailor:
-{marine_context(data)}
-Explain what the numbers mean, what deserves attention, what information is missing,
-and what the user should check before making a decision. Do not give a definitive
-safe/unsafe-to-sail answer without knowing the boat, crew, route and official warnings."""
-            start_conversation(prompt)
-        if st.button("🧭 What should I check before leaving?", use_container_width=True):
-            prompt = f"""Current marine conditions:
-{marine_context(data)}
-I am a first-time sailor. Do not tell me simply whether I should sail.
-Explain what I need to know before making a departure decision and what additional
-information you need about my boat, crew and route."""
-            start_conversation(prompt)
-
-def learn_page():
-    st.markdown('<div class="eyebrow">LEARNING MODE</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-title" style="font-size:3.5rem">Teach me.</div>', unsafe_allow_html=True)
-    st.markdown('<div class="hero-subtitle">No sailing degree required. Ask anything and we’ll start from where you are.</div>', unsafe_allow_html=True)
-    st.write("")
-    lessons = [
-        ("⚓", "Boat basics", "Learn the parts of a boat and what they do.", "Teach me the basic parts of a boat from zero."),
-        ("🧭", "Navigation", "Understand charts, compass, bearings and position.", "Teach me navigation from absolute zero."),
-        ("🌬️", "Weather", "Understand wind, waves, swell and forecasts.", "Teach me how a beginner should read marine weather."),
-        ("⛵", "Sailing", "Learn sails, points of sail, tacking and gybing.", "Teach me the fundamentals of sailing."),
-        ("⚓", "Anchoring", "Learn how to anchor and what can go wrong.", "Teach me anchoring from scratch."),
-        ("🔋", "Boat electrical", "Understand batteries, charging and power.", "Teach me boat electrical systems like I know nothing."),
-        ("🛢️", "Engine basics", "Understand the engine without becoming a mechanic.", "Teach me the basics of a marine diesel engine."),
-        ("🛟", "Safety", "Build your mental emergency checklist.", "Teach me the most important safety knowledge for a new boat owner."),
-    ]
-    cols = st.columns(4)
-    for i, (icon, title, description, prompt) in enumerate(lessons):
-        with cols[i % 4]:
-            st.markdown(f'<div class="sea-card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-description">{description}</div></div>', unsafe_allow_html=True)
-            if st.button("Start lesson →", key=f"lesson_{i}", use_container_width=True):
-                start_conversation(prompt, "learn")
-
-def emergency_page():
-    st.markdown('<div class="emergency-banner"><h1>🚨 Something is wrong.</h1><div style="opacity:.85">Stay calm. SeaSage will help you focus on the next important action.</div></div>', unsafe_allow_html=True)
-    st.markdown('<div class="warning-card"><strong>If anyone is in immediate danger:</strong> contact the appropriate emergency or maritime authorities and use your onboard emergency procedures. SeaSage is not an emergency service.</div>', unsafe_allow_html=True)
-    st.write("")
-    emergencies = [("🔥", "Fire"), ("💧", "Flooding"), ("🧍", "Person overboard"), ("🛢️", "Engine failure"), ("⚡", "Electrical"), ("⛵", "Rigging"), ("🧭", "Steering"), ("🌊", "Severe weather")]
-    cols = st.columns(4)
-    for i, (icon, title) in enumerate(emergencies):
-        with cols[i % 4]:
-            if st.button(f"{icon}  {title}", key=f"emergency_{i}", use_container_width=True):
-                prompt = f"""EMERGENCY MODE.
-The user reports a {title.lower()} emergency.
-Give the safest immediate actions first. Keep it short. Do not overwhelm them.
-Ask only the most important next question. Encourage appropriate emergency
-or maritime assistance. Do not assume missing details."""
-                start_conversation(prompt, "emergency")
-    st.write("")
-    st.markdown("### Or tell me exactly what happened.")
-    emergency_text = st.text_area("Describe the situation", placeholder="Example: The engine alarm is sounding and the temperature gauge is rising.", height=130, label_visibility="collapsed")
-    if st.button("🚨 Get immediate guidance", use_container_width=True):
-        if emergency_text.strip():
-            prompt = f"""EMERGENCY MODE.
-The user reports:
-{emergency_text}
-Respond with immediate safety guidance using short numbered steps.
-Tell them what not to do if relevant. Ask only the next critical question.
-Encourage appropriate emergency/maritime assistance."""
-            st.session_state.mode = "emergency"
-            add_message("user", emergency_text)
-            add_message("assistant", ask_seasage(prompt))
-            st.rerun()
+# ------------------------- CHAT ------------------------------
 
 def chat_page():
-    c1, c2 = st.columns([4, 1])
-    with c1:
-        st.markdown('<div class="eyebrow">⚓ SEASAGE</div>', unsafe_allow_html=True)
-        st.markdown('<h1 style="font-size:3rem;margin-bottom:.2rem">Your first mate.</h1>', unsafe_allow_html=True)
-    with c2:
-        st.markdown('<div class="status-pill"><div class="status-dot"></div> AI online</div>', unsafe_allow_html=True)
-    for message in st.session_state.messages:
-        if message["role"] == "assistant":
-            with st.chat_message("assistant", avatar="⚓"):
-                st.markdown(message["content"])
-        else:
-            with st.chat_message("user", avatar="🧑‍✈️"):
-                st.markdown(message["content"])
-    if not st.session_state.messages:
-        st.markdown('<div class="sea-card"><div class="card-icon">⚓</div><div class="card-title" style="font-size:1.4rem">I’m here.</div><div class="card-description">Tell me what you’re trying to do, what you’re worried about, or what you want to learn.</div></div>', unsafe_allow_html=True)
-        st.write("")
-        starters = ["I've never owned a boat. Where should I start?", "I'm thinking of buying a used sailboat. What should I inspect?", "Teach me how to anchor properly."]
-        cols = st.columns(3)
-        for i, prompt in enumerate(starters):
-            with cols[i]:
-                if st.button(prompt, key=f"starter_{i}", use_container_width=True):
-                    start_conversation(prompt)
-    user_prompt = st.chat_input("Ask SeaSage anything...")
-    if user_prompt:
-        add_message("user", user_prompt)
-        with st.chat_message("user", avatar="🧑‍✈️"):
-            st.markdown(user_prompt)
-        with st.chat_message("assistant", avatar="⚓"):
-            with st.spinner("SeaSage is thinking..."):
-                answer = ask_seasage(user_prompt)
-            st.markdown(answer)
-        add_message("assistant", answer)
+    st.markdown('<div class="eyebrow">⚓ FIRST MATE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.7rem">Tell me what’s going on.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">Describe it however you want. “There’s a weird thing making a clicking noise” is perfectly acceptable.</div>',
+        unsafe_allow_html=True,
+    )
 
-if not st.session_state.onboarding_complete:
-    onboarding()
+    if not st.session_state.messages:
+        st.write("")
+        st.markdown(
+            '<div class="tip"><strong>SeaSage works best when you describe what you actually see.</strong><br>You don\'t need the right nautical term. If a photo would help, use the camera/upload option below.</div>',
+            unsafe_allow_html=True,
+        )
+
+    for msg in st.session_state.messages:
+        with st.chat_message(
+            "assistant" if msg["role"] == "assistant" else "user",
+            avatar="⚓" if msg["role"] == "assistant" else "🧑‍✈️",
+        ):
+            st.markdown(msg["content"])
+
+    pending = st.session_state.pending_prompt
+    if pending:
+        st.session_state.pending_prompt = None
+        ask(pending)
+
+    prompt = st.chat_input("Ask SeaSage anything about your boat...")
+    if prompt:
+        ask(prompt)
+
+    st.write("")
+    with st.expander("📷 Show SeaSage a photo"):
+        photo = st.file_uploader(
+            "Upload a boat/part/problem photo",
+            type=["jpg","jpeg","png","webp"],
+            key="chat_photo",
+        )
+        if photo:
+            st.image(photo.getvalue(), use_container_width=True)
+            photo_question = st.text_input(
+                "What do you want to know?",
+                placeholder="What is this? How do I remove it? Does it look wrong?",
+                key="photo_question",
+            )
+            if st.button("Look at this with me", type="primary"):
+                q = photo_question.strip() or (
+                    "Look at this photo as my first mate. Identify what you can "
+                    "with confidence, explain what it probably does, tell me "
+                    "what I should photograph next if necessary, and give me "
+                    "the safest useful thing I can inspect or do next."
+                )
+                ask(q, photo.getvalue(), photo.type)
+
+# ------------------------- BOAT ------------------------------
+
+def boat_page():
+    b = st.session_state.boat
+
+    st.markdown('<div class="eyebrow">🛥️ MY BOAT</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.7rem">Get to know<br>your boat.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">Give SeaSage a few facts so its advice is about your boat, not an imaginary generic boat.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write("")
+
+    with st.form("boat_form"):
+        a,bcol = st.columns(2)
+
+        with a:
+            name = st.text_input("Boat name", value=b.get("name",""), placeholder="Blue Hour")
+            options = ["","Monohull sailboat","Catamaran","Motorboat","Trawler","Trimaran","Other"]
+            current = b.get("type","")
+            boat_type = st.selectbox("Boat type", options, index=options.index(current) if current in options else 0)
+            make_model = st.text_input("Make / model", value=b.get("make_model",""), placeholder="Beneteau Oceanis 35")
+            length = st.text_input("Length", value=b.get("length",""), placeholder="35 ft")
+            year = st.text_input("Year", value=b.get("year",""), placeholder="2016")
+
+        with bcol:
+            engine = st.text_input("Engine", value=b.get("engine",""), placeholder="Yanmar 3YM30")
+            hours = st.text_input("Engine hours", value=b.get("engine_hours",""), placeholder="2,400")
+            location = st.text_input("Where is it?", value=b.get("location",""), placeholder="Goa, India")
+            notes = st.text_area("Things I should know", value=b.get("notes",""), height=150, placeholder="Solar, watermaker, known leaks, refit plans...")
+
+        save = st.form_submit_button("Save my boat", type="primary")
+
+    if save:
+        st.session_state.boat = {
+            "name":name.strip(),
+            "type":boat_type,
+            "make_model":make_model.strip(),
+            "year":year.strip(),
+            "length":length.strip(),
+            "engine":engine.strip(),
+            "engine_hours":hours.strip(),
+            "location":location.strip(),
+            "notes":notes.strip(),
+        }
+        st.success("Saved. SeaSage will remember this boat during your session.")
+
+    st.write("")
+    st.markdown("### Explore your systems")
+
+    systems = [
+        ("🛢️","Engine","Fuel, cooling, oil, exhaust and maintenance."),
+        ("🔋","Electrical","Batteries, charging, fuses and circuits."),
+        ("💧","Plumbing","Water tanks, pumps, hoses and drains."),
+        ("⚓","Anchoring","Anchor, rode, scope and setting."),
+        ("⛵","Rigging","Mast, boom, lines and standing rigging."),
+        ("🧭","Navigation","Charts, GPS, compass and depth."),
+        ("🚽","Sanitation","Toilet, holding tank and hoses."),
+        ("🛟","Safety","Know where your critical equipment lives."),
+    ]
+
+    cols = st.columns(4)
+
+    for i,(icon,title,desc) in enumerate(systems):
+        with cols[i]:
+            st.markdown(
+                f'<div class="card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-text">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Teach me →", key=f"system_{i}"):
+                open_prompt(
+                    f"Teach me the {title.lower()} system on my boat from absolute zero. "
+                    "Give me the simple mental model, then tell me what parts I "
+                    "should physically find on my boat, what each does, what "
+                    "I should inspect, common failures, and one hands-on exercise "
+                    "I can do to learn it."
+                )
+
+# ------------------------- FIX --------------------------------
+
+def fix_page():
+    st.markdown('<div class="eyebrow">🔧 GARAGE MODE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.7rem">Let’s figure out<br>what’s wrong.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">You can open things, learn, test and repair. SeaSage will help you work out what to do next.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write("")
+
+    common = [
+        ("🛢️","Engine","Won't start, overheats, smoke, alarms, power loss"),
+        ("🔋","Electrical","Dead circuit, battery, charging, lights"),
+        ("💧","Water / bilge","Water appearing, pump running, leak"),
+        ("🚽","Plumbing","Toilet, freshwater pump, tank, hose"),
+        ("⛵","Rigging","Line, sail, mast or hardware"),
+        ("🧭","Navigation","GPS, depth, compass or instrument"),
+        ("⚓","Anchoring","Anchor, windlass, chain or dragging"),
+        ("❓","Something else","Describe it in your own words"),
+    ]
+
+    cols = st.columns(4)
+
+    for i,(icon,title,desc) in enumerate(common):
+        with cols[i]:
+            st.markdown(
+                f'<div class="card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-text">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Start →", key=f"fix_{i}"):
+                open_prompt(
+                    f"I have a {title.lower()} problem on my boat. "
+                    "Act like you are standing beside me. Start with the "
+                    "single most useful diagnostic question. Assume I am a beginner."
+                )
+
+    st.write("")
+    st.markdown("### Or describe the problem")
+
+    problem = st.text_area(
+        "What happened?",
+        placeholder=(
+            "Example: My engine starts normally but after five minutes "
+            "the temperature alarm comes on. I can still see water coming "
+            "out of the exhaust."
+        ),
+        height=130,
+    )
+
+    if st.button("🔧 Diagnose it with me", type="primary"):
+        if problem.strip():
+            open_prompt(
+                "Help me diagnose this step by step. Tell me what you think "
+                "might be happening, then ask me the most useful next question. "
+                "Do not jump to replacing parts.\n\n"
+                + problem
+            )
+        else:
+            st.warning("Tell me what is happening first.")
+
+    st.write("")
+    st.markdown("### 📷 Or show me")
+
+    photo = st.file_uploader(
+        "Upload a photo of the part/problem",
+        type=["jpg","jpeg","png","webp"],
+        key="fix_photo",
+    )
+
+    if photo:
+        st.image(photo.getvalue(), use_container_width=True)
+        q = st.text_input(
+            "What do you want me to help with?",
+            placeholder="What is this? How do I open it? What looks wrong?",
+            key="fix_photo_question",
+        )
+        if st.button("🔍 Look at it with me", type="primary"):
+            question = q.strip() or (
+                "Identify what you can in this photo with confidence. "
+                "Explain what the component probably does. Tell me what "
+                "I can safely inspect myself and what photo/detail you want "
+                "next if identification is uncertain."
+            )
+            ask(question, photo.getvalue(), photo.type)
+
+# ------------------------- TRIP -------------------------------
+
+def trip_page():
+    st.markdown('<div class="eyebrow">🧭 GO SOMEWHERE</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.7rem">Let\'s get ready<br>to leave.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">Think through the boat, crew, route, weather information, fuel, water and what happens if something goes wrong.</div>',
+        unsafe_allow_html=True,
+    )
+
+    a,b = st.columns(2)
+
+    with a:
+        departure = st.text_input("Leaving from", placeholder="Goa")
+        destination = st.text_input("Going to", placeholder="Gokarna")
+        duration = st.text_input("How long?", placeholder="One night")
+
+    with b:
+        crew = st.text_input("Who's coming?", placeholder="2 adults, both beginners")
+        concerns = st.text_area("Anything you're worried about?", height=100, placeholder="No radar, new engine, little sailing experience...")
+
+    st.markdown(
+        '<div class="tip"><strong>For a real trip:</strong> check current official marine forecasts, warnings and local navigation information. SeaSage can help you understand what to check and turn it into a practical checklist.</div>',
+        unsafe_allow_html=True,
+    )
+
+    if st.button("🧭 Build my departure checklist", type="primary"):
+        open_prompt(
+            f"""
+I'm planning a boat trip.
+
+Leaving: {departure or 'unknown'}
+Destination: {destination or 'unknown'}
+Duration: {duration or 'unknown'}
+Crew: {crew or 'unknown'}
+Concerns: {concerns or 'none'}
+
+Help me prepare as a beginner. Give me:
+1. Boat readiness
+2. Weather/sea information I need to obtain
+3. Navigation preparation
+4. Fuel/water/power/food
+5. Safety and communications
+6. Crew briefing
+7. Contingencies
+8. A final pre-departure checklist
+
+Do not invent current weather or call the trip safe without the necessary information.
+"""
+        )
+
+# ------------------------- LEARN ------------------------------
+
+def learn_page():
+    st.markdown('<div class="eyebrow">🎓 LEARN BY DOING</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.7rem">Understand the machine<br>you live on.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="hero-subtitle">Pick something. Learn the idea, then go find it on your actual boat.</div>',
+        unsafe_allow_html=True,
+    )
+
+    lessons = [
+        ("🛥️","Boat anatomy","Learn what everything is.","Give me a hands-on tour of a typical cruising boat. Start outside and work inward."),
+        ("🛢️","Diesel engine","Understand the engine before it scares you.","Teach me the basic mental model of a marine diesel engine and then tell me what I should find in my engine compartment."),
+        ("🔋","Boat electrics","Stop being afraid of the panel.","Teach me boat electrical systems from zero and give me a simple hands-on exercise with my own boat."),
+        ("💧","Plumbing","Follow water around the boat.","Teach me how freshwater, pumps, tanks, hoses and drains work and give me an inspection exercise."),
+        ("⚓","Anchoring","Learn why the anchor holds.","Teach me anchoring from zero, including rode, scope, setting and how to recognise dragging."),
+        ("⛵","Sailing","Understand wind and sails.","Teach me points of sail, sheets, halyards, trim, tacking and reefing with practical examples."),
+        ("🧭","Navigation","Learn more than pressing Go.","Teach me charts, GPS, compass, depth, lookout and navigation redundancy from zero."),
+        ("🌊","Weather","Understand waves and swell.","Teach me wind, wave height, wave period, swell and current and how sailors use forecasts."),
+        ("🏠","Living aboard","Treat the boat like a tiny home.","Teach me water, power, waste, ventilation, condensation, food, spares and maintenance for living aboard."),
+    ]
+
+    cols = st.columns(3)
+
+    for i,(icon,title,desc,prompt) in enumerate(lessons):
+        with cols[i]:
+            st.markdown(
+                f'<div class="card"><div class="card-icon">{icon}</div><div class="card-title">{title}</div><div class="card-text">{desc}</div></div>',
+                unsafe_allow_html=True,
+            )
+            if st.button("Start learning →", key=f"learn_{i}"):
+                open_prompt(prompt)
+
+# ------------------------- EMERGENCY --------------------------
+
+def emergency_page():
+    st.markdown('<div class="eyebrow">🚨 EMERGENCY</div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="hero-title" style="font-size:3.8rem">Tell me what is happening.</div>',
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        '<div class="danger"><strong>If someone is in immediate danger:</strong> use your onboard emergency procedures and contact the appropriate maritime/emergency service. SeaSage is an AI guide, not an emergency service.</div>',
+        unsafe_allow_html=True,
+    )
+
+    st.write("")
+
+    situations = [
+        ("🔥","Fire"),
+        ("💧","Flooding"),
+        ("🧍","Person overboard"),
+        ("🛢️","Engine failure"),
+        ("⚡","Electrical fire"),
+        ("⛵","Rigging failure"),
+        ("🧭","Loss of steering"),
+        ("🌊","Severe weather"),
+    ]
+
+    cols = st.columns(4)
+
+    for i,(icon,title) in enumerate(situations):
+        with cols[i]:
+            if st.button(f"{icon} {title}", key=f"em_{i}", type="primary"):
+                open_prompt(
+                    f"EMERGENCY: {title}. Give immediate practical actions first, "
+                    "keep them short, tell me what to avoid if important, and ask "
+                    "only the most critical next question."
+                )
+
+    st.write("")
+
+    situation = st.text_area(
+        "Describe what is happening",
+        placeholder="Tell me exactly what you see, hear, smell or feel.",
+        height=120,
+    )
+
+    if st.button("🚨 Help me now", type="primary"):
+        if situation.strip():
+            open_prompt(
+                "EMERGENCY.\n\n"
+                + situation
+                + "\n\nGive immediate practical actions first. Keep it concise."
+            )
+        else:
+            st.warning("Describe what is happening.")
+
+# ------------------------- ROUTER -----------------------------
+
+nav()
+
+if st.session_state.page == "home":
+    home()
+elif st.session_state.page == "chat":
+    chat_page()
+elif st.session_state.page == "boat":
+    boat_page()
+elif st.session_state.page == "fix":
+    fix_page()
+elif st.session_state.page == "trip":
+    trip_page()
+elif st.session_state.page == "learn":
+    learn_page()
+elif st.session_state.page == "emergency":
+    emergency_page()
 else:
-    mode = st.session_state.mode
-    if mode == "home":
-        home()
-    elif mode == "boat":
-        boat_page()
-    elif mode == "fix":
-        fix_page()
-    elif mode == "trip":
-        trip_page()
-    elif mode == "sea":
-        sea_page()
-    elif mode == "learn":
-        learn_page()
-    elif mode == "emergency":
-        emergency_page()
-    elif mode == "chat":
-        chat_page()
-    else:
-        home()
+    home()
