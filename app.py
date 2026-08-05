@@ -1,29 +1,32 @@
 import os
 import requests
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 
-# Page Config
+# Page Configuration
 st.set_page_config(
     page_title="SeaSage - Global Marine Mentor",
     page_icon="⚓",
     layout="centered"
 )
 
-# Fetch API key safely
+# Load API key securely
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
-    st.error("Missing GEMINI_API_KEY! Please check your Streamlit secrets settings.")
+    st.error("Missing GEMINI_API_KEY! Please check your Streamlit Secrets settings.")
     st.stop()
 
-# Configure Google Gemini
-genai.configure(api_key=api_key)
+@st.cache_resource
+def get_client():
+    return genai.Client(api_key=api_key)
+
+client = get_client()
 
 SYSTEM_PROMPT = """
 You are SeaSage, an expert marine mentor for first-time sailors globally. 
 Provide practical, plain-English guidance for boat buying, repairs, and living at sea.
-When diagnosing issues, always state: 
+When diagnosing issues, state: 
 1. Safety Check
 2. Tools Needed
 3. Step-by-Step Fix
@@ -40,7 +43,7 @@ def get_marine_weather(lat: float, lon: float):
         return {"error": str(e)}
     return {}
 
-# --- App UI ---
+# UI Interface
 st.title("⚓ SeaSage")
 st.caption("Your Global Marine Mentor & Boat Assistant")
 
@@ -58,23 +61,19 @@ with tab_chat:
         else:
             with st.spinner("Consulting marine knowledge base..."):
                 try:
-                    # Model configuration
-                    model = genai.GenerativeModel(
-                        model_name="gemini-1.5-flash",
-                        system_instruction=SYSTEM_PROMPT
-                    )
-                    
                     contents = []
                     if uploaded_image:
                         from PIL import Image
                         img = Image.open(uploaded_image)
                         contents.append(img)
-                    
                     if user_query:
                         contents.append(user_query)
 
-                    response = model.generate_content(contents)
-                    
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=contents,
+                        config={"system_instruction": SYSTEM_PROMPT}
+                    )
                     st.markdown("### 🧭 SeaSage Guidance:")
                     st.write(response.text)
                 except Exception as e:
