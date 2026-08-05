@@ -1,11 +1,12 @@
 import os
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning) # This hides the annoying Google warning
 import requests
 import streamlit as st
-from google import genai
-from google.genai.errors import APIError
+import google.generativeai as genai
 from PIL import Image
 
-# Page Configuration
+# Page Config
 st.set_page_config(
     page_title="SeaSage - Global Marine Mentor",
     page_icon="⚓",
@@ -31,12 +32,8 @@ if not api_key:
     st.error("Missing GEMINI_API_KEY! Please check your Streamlit Secrets settings.")
     st.stop()
 
-# Use the modern, supported SDK
-@st.cache_resource
-def get_client():
-    return genai.Client(api_key=api_key)
-
-client = get_client()
+# Configure stable client
+genai.configure(api_key=api_key)
 
 SYSTEM_PROMPT = """
 You are SeaSage, an expert marine mentor for first-time sailors globally. 
@@ -47,6 +44,16 @@ When diagnosing issues or answering queries, structure your response as follows:
 - ACTION PLAN: Clear, numbered step-by-step instructions.
 - WHEN TO CALL A PRO: Threshold conditions for hiring a certified surveyor/mechanic.
 """
+
+# Initialize the model that actually works for your tier
+@st.cache_resource
+def get_model():
+    return genai.GenerativeModel(
+        model_name='gemini-1.5-flash',
+        system_instruction=SYSTEM_PROMPT
+    )
+
+model = get_model()
 
 def get_marine_weather(lat: float, lon: float):
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
@@ -82,21 +89,10 @@ with tab_chat:
                     contents.append(user_query)
 
                 try:
-                    # STRICTLY locked to the model that works with your key
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=contents,
-                        config={"system_instruction": SYSTEM_PROMPT}
-                    )
+                    response = model.generate_content(contents)
                     st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
                     st.write(response.text)
                     st.markdown('</div>', unsafe_allow_html=True)
-                
-                except APIError as e:
-                    if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                        st.error("⏳ Google Free Tier rate limit reached (15 requests/minute). Please wait exactly 60 seconds and try again.")
-                    else:
-                        st.error(f"API Error: {e}")
                 except Exception as e:
                     st.error(f"Error connecting to SeaSage: {e}")
 
