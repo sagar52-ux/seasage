@@ -13,41 +13,12 @@ st.set_page_config(
 # Custom Marine UI Styling
 st.markdown("""
 <style>
-    .stApp {
-        background-color: #0d1b2a;
-        color: #e0e1dd;
-    }
-    .block-container {
-        padding-top: 1.5rem;
-        padding-bottom: 2rem;
-    }
-    .sage-card {
-        background-color: #1b263b;
-        border-left: 5px solid #62b6cb;
-        border-radius: 8px;
-        padding: 20px;
-        margin-top: 15px;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    .sage-title {
-        color: #62b6cb;
-        font-weight: bold;
-        font-size: 1.1rem;
-        margin-bottom: 8px;
-    }
-    .stButton>button {
-        background-color: #1b4965;
-        color: white;
-        border-radius: 8px;
-        border: none;
-        width: 100%;
-        padding: 10px;
-        font-weight: bold;
-    }
-    .stButton>button:hover {
-        background-color: #62b6cb;
-        color: #0d1b2a;
-    }
+    .stApp { background-color: #0d1b2a; color: #e0e1dd; }
+    .block-container { padding-top: 1.5rem; padding-bottom: 2rem; }
+    .sage-card { background-color: #1b263b; border-left: 5px solid #62b6cb; border-radius: 8px; padding: 20px; margin-top: 15px; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+    .sage-title { color: #62b6cb; font-weight: bold; font-size: 1.1rem; margin-bottom: 8px; }
+    .stButton>button { background-color: #1b4965; color: white; border-radius: 8px; border: none; width: 100%; padding: 10px; font-weight: bold; }
+    .stButton>button:hover { background-color: #62b6cb; color: #0d1b2a; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,8 +80,9 @@ with tab_chat:
                     contents.append(user_query)
 
                 try:
+                    # STRICTLY locked to the only model that worked for your key
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=contents,
                         config={"system_instruction": SYSTEM_PROMPT}
                     )
