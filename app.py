@@ -10,35 +10,31 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom Styling to transform Streamlit into a polished mobile app UI
+# Custom Styling
 st.markdown("""
 <style>
-    /* Dark Ocean Theme & Typography */
     .stApp {
         background-color: #0d1b2a;
         color: #e0e1dd;
     }
-    /* Hide top header padding */
     .block-container {
         padding-top: 1.5rem;
         padding-bottom: 2rem;
     }
-    /* Styled Chat Bubble for Guidance */
     .sage-card {
         background-color: #1b263b;
-        border-left: 5px solid #415a77;
+        border-left: 5px solid #62b6cb;
         border-radius: 8px;
         padding: 20px;
         margin-top: 15px;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     .sage-title {
-        color: #778da9;
+        color: #62b6cb;
         font-weight: bold;
         font-size: 1.1rem;
         margin-bottom: 8px;
     }
-    /* Buttons */
     .stButton>button {
         background-color: #1b4965;
         color: white;
@@ -88,7 +84,7 @@ def get_marine_weather(lat: float, lon: float):
         return {"error": str(e)}
     return {}
 
-# UI Interface Header
+# UI Interface
 st.title("⚓ SeaSage")
 st.caption("Your Global Marine Mentor & Boat Assistant")
 
@@ -96,7 +92,7 @@ tab_chat, tab_weather = st.tabs(["💬 Ask Mentor", "🌊 Live Weather"])
 
 with tab_chat:
     uploaded_image = st.file_uploader("📷 Upload photo (Engine, Hull, Leak)", type=["jpg", "png", "jpeg"])
-    user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull has a visible hairline crack near the waterline, what should I do?")
+    user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull is cracked what do to?")
     
     if st.button("Get Guidance", type="primary"):
         if not user_query and not uploaded_image:
@@ -112,20 +108,29 @@ with tab_chat:
                     if user_query:
                         contents.append(user_query)
 
-                    # Using the active model: gemini-1.5-flash
                     response = client.models.generate_content(
-                        model="gemini-1.5-flash",
+                        model="gemini-2.5-flash",
                         contents=contents,
                         config={"system_instruction": SYSTEM_PROMPT}
                     )
                     
-                    # Displaying output inside a custom styled mentor card
                     st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
                     st.write(response.text)
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 except Exception as e:
-                    st.error(f"Error connecting to SeaSage: {e}")
+                    # Fallback for API model string variations
+                    try:
+                        response = client.models.generate_content(
+                            model="models/gemini-1.5-flash",
+                            contents=contents,
+                            config={"system_instruction": SYSTEM_PROMPT}
+                        )
+                        st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
+                        st.write(response.text)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                    except Exception as fallback_error:
+                        st.error(f"Error connecting to SeaSage: {fallback_error}")
 
 with tab_weather:
     st.subheader("Offshore Weather Check")
