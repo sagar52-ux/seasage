@@ -1,5 +1,4 @@
 streamlit==1.37.0
-starlette==0.37.2
-google-generativeai
 requests
 pillow
+google-genai
