@@ -10,7 +10,7 @@ st.set_page_config(
     layout="centered"
 )
 
-# Custom Styling
+# Custom Marine UI Styling
 st.markdown("""
 <style>
     .stApp {
@@ -84,7 +84,7 @@ def get_marine_weather(lat: float, lon: float):
         return {"error": str(e)}
     return {}
 
-# UI Interface
+# UI Interface Header
 st.title("⚓ SeaSage")
 st.caption("Your Global Marine Mentor & Boat Assistant")
 
@@ -92,7 +92,7 @@ tab_chat, tab_weather = st.tabs(["💬 Ask Mentor", "🌊 Live Weather"])
 
 with tab_chat:
     uploaded_image = st.file_uploader("📷 Upload photo (Engine, Hull, Leak)", type=["jpg", "png", "jpeg"])
-    user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull is cracked what do to?")
+    user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull is cracked what do I do?")
     
     if st.button("Get Guidance", type="primary"):
         if not user_query and not uploaded_image:
@@ -108,6 +108,7 @@ with tab_chat:
                     if user_query:
                         contents.append(user_query)
 
+                    # Using gemini-2.5-flash with the new google-genai SDK
                     response = client.models.generate_content(
                         model="gemini-2.5-flash",
                         contents=contents,
@@ -119,18 +120,7 @@ with tab_chat:
                     st.markdown('</div>', unsafe_allow_html=True)
 
                 except Exception as e:
-                    # Fallback for API model string variations
-                    try:
-                        response = client.models.generate_content(
-                            model="models/gemini-1.5-flash",
-                            contents=contents,
-                            config={"system_instruction": SYSTEM_PROMPT}
-                        )
-                        st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
-                        st.write(response.text)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                    except Exception as fallback_error:
-                        st.error(f"Error connecting to SeaSage: {fallback_error}")
+                    st.error(f"Error connecting to SeaSage: {e}")
 
 with tab_weather:
     st.subheader("Offshore Weather Check")
