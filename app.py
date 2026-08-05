@@ -108,9 +108,9 @@ with tab_chat:
                     if user_query:
                         contents.append(user_query)
 
-                    # Using gemini-2.5-flash with the new google-genai SDK
+                    # Updated to gemini-2.0-flash
                     response = client.models.generate_content(
-                        model="gemini-2.5-flash",
+                        model="gemini-2.0-flash",
                         contents=contents,
                         config={"system_instruction": SYSTEM_PROMPT}
                     )
