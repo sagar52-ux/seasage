@@ -13,10 +13,15 @@ st.set_page_config(
     layout="centered"
 )
 
-# Initialize Gemini Client (Ensure GEMINI_API_KEY environment variable is set)
+# Fetch API key safely from Streamlit Secrets or Environment Variables
+api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
+
 @st.cache_resource
 def get_gemini_client():
-    return genai.Client()
+    if not api_key:
+        st.error("Missing GEMINI_API_KEY! Please check your Streamlit secrets settings.")
+        st.stop()
+    return genai.Client(api_key=api_key)
 
 client = get_gemini_client()
 
@@ -71,14 +76,13 @@ with tab_chat:
                 if user_query:
                     contents.append(user_query)
 
-                # Query Gemini 2.5 Flash with Google Search Grounding enabled
                 try:
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=contents,
                         config=types.GenerateContentConfig(
                             system_instruction=SYSTEM_PROMPT,
-                            tools=[{"google_search": {}}],  # Enables real-time web search grounding
+                            tools=[{"google_search": {}}],
                             temperature=0.7,
                         )
                     )
@@ -92,7 +96,7 @@ with tab_weather:
     st.subheader("Global Offshore Weather Check")
     col1, col2 = st.columns(2)
     with col1:
-        lat = st.number_input("Latitude", value=25.7617)  # Default: Miami/Bahamas approach
+        lat = st.number_input("Latitude", value=25.7617)
     with col2:
         lon = st.number_input("Longitude", value=-80.1918)
         
