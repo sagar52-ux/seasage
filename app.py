@@ -1357,7 +1357,7 @@ def fix_page():
     st.markdown('<div class="eyebrow">TROUBLESHOOTING</div>', unsafe_allow_html=True)
 
     st.markdown(
-        '<div class="hero-title" style="font-size:3.5rem;">Something's wrong.</div>',
+       "<div class=\"hero-title\" style=\"font-size:3.5rem;\">Something's wrong.</div>",
         unsafe_allow_html=True,
     )
 
