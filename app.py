@@ -1,41 +1,36 @@
 import os
 import requests
 import streamlit as st
-from google import genai
-from google.genai import types
+import google.generativeai as genai
 
-# -------------------------------------------------------------------
-# Configuration & Setup
-# -------------------------------------------------------------------
+# Page Config
 st.set_page_config(
     page_title="SeaSage - Global Marine Mentor",
     page_icon="⚓",
     layout="centered"
 )
 
-# Fetch API key safely from Streamlit Secrets or Environment Variables
+# Fetch API key safely
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
-@st.cache_resource
-def get_gemini_client():
-    if not api_key:
-        st.error("Missing GEMINI_API_KEY! Please check your Streamlit secrets settings.")
-        st.stop()
-    return genai.Client(api_key=api_key)
+if not api_key:
+    st.error("Missing GEMINI_API_KEY! Please check your Streamlit secrets settings.")
+    st.stop()
 
-client = get_gemini_client()
+# Configure Google Gemini
+genai.configure(api_key=api_key)
 
 SYSTEM_PROMPT = """
-You are SeaSage, a marine mentor for first-time sailors globally. 
+You are SeaSage, an expert marine mentor for first-time sailors globally. 
 Provide practical, plain-English guidance for boat buying, repairs, and living at sea.
-When diagnosing issues, always state: 1. Safety Check, 2. Tools Needed, 3. Step-by-Step Fix, 4. When to Call a Pro.
+When diagnosing issues, always state: 
+1. Safety Check
+2. Tools Needed
+3. Step-by-Step Fix
+4. When to Call a Pro.
 """
 
-# -------------------------------------------------------------------
-# Helper Functions
-# -------------------------------------------------------------------
 def get_marine_weather(lat: float, lon: float):
-    """Fetch free global marine weather data from Open-Meteo Marine API."""
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
     try:
         response = requests.get(url, timeout=10)
@@ -45,53 +40,46 @@ def get_marine_weather(lat: float, lon: float):
         return {"error": str(e)}
     return {}
 
-# -------------------------------------------------------------------
-# User Interface (Streamlit)
-# -------------------------------------------------------------------
+# --- App UI ---
 st.title("⚓ SeaSage")
 st.caption("Your Global Marine Mentor & Boat Assistant")
 
-# Navigation Tabs
 tab_chat, tab_weather = st.tabs(["💬 Ask Mentor", "🌊 Live Marine Weather"])
 
-# --- TAB 1: AI Chatbot & Visual Diagnostics ---
 with tab_chat:
     st.subheader("How can I help you on deck today?")
     
-    # Image Uploader for Diagnostic Mode
-    uploaded_image = st.file_uploader("Upload engine, hull, or electrical photo for analysis", type=["jpg", "png", "jpeg"])
-    
-    user_query = st.text_area("Describe your issue, question, or location:", placeholder="e.g., My diesel engine is spitting steam, or what should I check when buying a 35ft sailboat?")
+    uploaded_image = st.file_uploader("Upload engine, hull, or electrical photo", type=["jpg", "png", "jpeg"])
+    user_query = st.text_area("Describe your issue or question:", placeholder="e.g., How do I check for transom rot when buying a boat?")
     
     if st.button("Get Guidance", type="primary"):
         if not user_query and not uploaded_image:
-            st.warning("Please provide a question or upload an image.")
+            st.warning("Please enter a question or upload an image.")
         else:
-            with st.spinner("Analyzing nautical manuals and live web data..."):
-                contents = []
-                if uploaded_image:
-                    image_bytes = uploaded_image.read()
-                    contents.append(types.Part.from_bytes(data=image_bytes, mime_type=uploaded_image.type))
-                
-                if user_query:
-                    contents.append(user_query)
-
+            with st.spinner("Consulting marine knowledge base..."):
                 try:
-                    response = client.models.generate_content(
-                        model='gemini-2.5-flash',
-                        contents=contents,
-                        config=types.GenerateContentConfig(
-                            system_instruction=SYSTEM_PROMPT,
-                            tools=[{"google_search": {}}],
-                            temperature=0.7,
-                        )
+                    # Model configuration
+                    model = genai.GenerativeModel(
+                        model_name="gemini-1.5-flash",
+                        system_instruction=SYSTEM_PROMPT
                     )
+                    
+                    contents = []
+                    if uploaded_image:
+                        from PIL import Image
+                        img = Image.open(uploaded_image)
+                        contents.append(img)
+                    
+                    if user_query:
+                        contents.append(user_query)
+
+                    response = model.generate_content(contents)
+                    
                     st.markdown("### 🧭 SeaSage Guidance:")
                     st.write(response.text)
                 except Exception as e:
-                    st.error(f"Error connecting to SeaSage brain: {e}")
+                    st.error(f"Error connecting to SeaSage: {e}")
 
-# --- TAB 2: Marine Weather ---
 with tab_weather:
     st.subheader("Global Offshore Weather Check")
     col1, col2 = st.columns(2)
