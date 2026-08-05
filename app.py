@@ -1,9 +1,10 @@
 import os
 import requests
 import streamlit as st
-from google import genai
+import google.generativeai as genai
+from PIL import Image
 
-# Page Configuration
+# Page Config
 st.set_page_config(
     page_title="SeaSage - Global Marine Mentor",
     page_icon="⚓",
@@ -29,11 +30,8 @@ if not api_key:
     st.error("Missing GEMINI_API_KEY! Please check your Streamlit Secrets settings.")
     st.stop()
 
-@st.cache_resource
-def get_client():
-    return genai.Client(api_key=api_key)
-
-client = get_client()
+# Configure stable client
+genai.configure(api_key=api_key)
 
 SYSTEM_PROMPT = """
 You are SeaSage, an expert marine mentor for first-time sailors globally. 
@@ -44,6 +42,16 @@ When diagnosing issues or answering queries, structure your response as follows:
 - ACTION PLAN: Clear, numbered step-by-step instructions.
 - WHEN TO CALL A PRO: Threshold conditions for hiring a certified surveyor/mechanic.
 """
+
+# Initialize the model
+@st.cache_resource
+def get_model():
+    return genai.GenerativeModel(
+        model_name='gemini-1.5-flash',
+        system_instruction=SYSTEM_PROMPT
+    )
+
+model = get_model()
 
 def get_marine_weather(lat: float, lon: float):
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
@@ -73,19 +81,13 @@ with tab_chat:
             with st.spinner("Consulting marine knowledge base..."):
                 contents = []
                 if uploaded_image:
-                    from PIL import Image
                     img = Image.open(uploaded_image)
                     contents.append(img)
                 if user_query:
                     contents.append(user_query)
 
                 try:
-                    # STRICTLY locked to the only model that worked for your key
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=contents,
-                        config={"system_instruction": SYSTEM_PROMPT}
-                    )
+                    response = model.generate_content(contents)
                     st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
                     st.write(response.text)
                     st.markdown('</div>', unsafe_allow_html=True)
