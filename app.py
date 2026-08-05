@@ -1,9 +1,11 @@
 import os
+import time
 import requests
 import streamlit as st
 from google import genai
+from google.genai.errors import APIError
 
-# Page Config
+# Page Configuration
 st.set_page_config(
     page_title="SeaSage - Global Marine Mentor",
     page_icon="⚓",
@@ -51,7 +53,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Fetch API Key
+# Fetch API Key securely from Secrets or Environment Variables
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -75,6 +77,7 @@ When diagnosing issues or answering queries, structure your response as follows:
 """
 
 def get_marine_weather(lat: float, lon: float):
+    """Fetch free global marine weather data from Open-Meteo API."""
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
     try:
         response = requests.get(url, timeout=10)
@@ -84,12 +87,13 @@ def get_marine_weather(lat: float, lon: float):
         return {"error": str(e)}
     return {}
 
-# UI Interface Header
+# --- App Header ---
 st.title("⚓ SeaSage")
 st.caption("Your Global Marine Mentor & Boat Assistant")
 
 tab_chat, tab_weather = st.tabs(["💬 Ask Mentor", "🌊 Live Weather"])
 
+# --- TAB 1: AI Mentor Chat & Visual Diagnostics ---
 with tab_chat:
     uploaded_image = st.file_uploader("📷 Upload photo (Engine, Hull, Leak)", type=["jpg", "png", "jpeg"])
     user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull is cracked what do I do?")
@@ -99,29 +103,40 @@ with tab_chat:
             st.warning("Please enter a question or upload an image.")
         else:
             with st.spinner("Consulting marine knowledge base..."):
-                try:
-                    contents = []
-                    if uploaded_image:
-                        from PIL import Image
-                        img = Image.open(uploaded_image)
-                        contents.append(img)
-                    if user_query:
-                        contents.append(user_query)
+                contents = []
+                if uploaded_image:
+                    from PIL import Image
+                    img = Image.open(uploaded_image)
+                    contents.append(img)
+                if user_query:
+                    contents.append(user_query)
 
-                    # Updated to gemini-2.0-flash
-                    response = client.models.generate_content(
-                        model="gemini-2.0-flash",
-                        contents=contents,
-                        config={"system_instruction": SYSTEM_PROMPT}
-                    )
-                    
-                    st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
-                    st.write(response.text)
-                    st.markdown('</div>', unsafe_allow_html=True)
+                # Resilient execution loop with auto-retry on 429 rate limits
+                success = False
+                for attempt in range(2):
+                    try:
+                        response = client.models.generate_content(
+                            model="gemini-2.0-flash",
+                            contents=contents,
+                            config={"system_instruction": SYSTEM_PROMPT}
+                        )
+                        st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
+                        st.write(response.text)
+                        st.markdown('</div>', unsafe_allow_html=True)
+                        success = True
+                        break
+                    except APIError as err:
+                        if "429" in str(err) and attempt == 0:
+                            time.sleep(10)  # Wait for rate limit window to reset
+                            continue
+                        else:
+                            st.error("SeaSage is receiving high traffic right now. Please wait 10 seconds and try again.")
+                            break
+                    except Exception as e:
+                        st.error(f"Error connecting to SeaSage: {e}")
+                        break
 
-                except Exception as e:
-                    st.error(f"Error connecting to SeaSage: {e}")
-
+# --- TAB 2: Marine Weather ---
 with tab_weather:
     st.subheader("Offshore Weather Check")
     col1, col2 = st.columns(2)
