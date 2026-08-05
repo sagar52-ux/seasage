@@ -1,6 +1,6 @@
 import os
 import warnings
-warnings.filterwarnings("ignore", category=FutureWarning) # This hides the annoying Google warning
+warnings.filterwarnings("ignore", category=FutureWarning) # Mutes the terminal warning
 import requests
 import streamlit as st
 import google.generativeai as genai
@@ -45,15 +45,31 @@ When diagnosing issues or answering queries, structure your response as follows:
 - WHEN TO CALL A PRO: Threshold conditions for hiring a certified surveyor/mechanic.
 """
 
-# Initialize the model that actually works for your tier
+# --- THE FIX: Auto-Detect Authorized Model ---
 @st.cache_resource
-def get_model():
+def get_working_model():
+    valid_models = []
+    # Ask Google for all models available to this specific key
+    for m in genai.list_models():
+        if 'generateContent' in m.supported_generation_methods:
+            valid_models.append(m.name)
+            
+    if not valid_models:
+        raise Exception("Your API key has no models authorized for content generation.")
+        
+    # Prefer a Flash model if available, otherwise take the first working one
+    target = next((m for m in valid_models if 'flash' in m.lower()), valid_models[0])
+    
     return genai.GenerativeModel(
-        model_name='gemini-1.5-flash',
+        model_name=target,
         system_instruction=SYSTEM_PROMPT
     )
 
-model = get_model()
+try:
+    model = get_working_model()
+except Exception as e:
+    st.error(f"API Authorization Error: {e}")
+    st.stop()
 
 def get_marine_weather(lat: float, lon: float):
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
