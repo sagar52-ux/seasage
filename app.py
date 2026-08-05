@@ -53,7 +53,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Fetch API Key securely from Secrets or Environment Variables
+# Fetch API Key
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -77,7 +77,6 @@ When diagnosing issues or answering queries, structure your response as follows:
 """
 
 def get_marine_weather(lat: float, lon: float):
-    """Fetch free global marine weather data from Open-Meteo API."""
     url = f"https://marine-api.open-meteo.com/v1/marine?latitude={lat}&longitude={lon}&current=wave_height,wave_direction,wind_wave_height,swell_wave_height,ocean_current_velocity"
     try:
         response = requests.get(url, timeout=10)
@@ -93,7 +92,7 @@ st.caption("Your Global Marine Mentor & Boat Assistant")
 
 tab_chat, tab_weather = st.tabs(["💬 Ask Mentor", "🌊 Live Weather"])
 
-# --- TAB 1: AI Mentor Chat & Visual Diagnostics ---
+# --- TAB 1: AI Mentor Chat ---
 with tab_chat:
     uploaded_image = st.file_uploader("📷 Upload photo (Engine, Hull, Leak)", type=["jpg", "png", "jpeg"])
     user_query = st.text_area("💬 Describe your issue or question:", placeholder="e.g., My hull is cracked what do I do?")
@@ -111,12 +110,14 @@ with tab_chat:
                 if user_query:
                     contents.append(user_query)
 
-                # Resilient execution loop with auto-retry on 429 rate limits
+                # Models to try sequentially if rate limited
+                models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
                 success = False
-                for attempt in range(2):
+
+                for model_name in models_to_try:
                     try:
                         response = client.models.generate_content(
-                            model="gemini-2.0-flash",
+                            model=model_name,
                             contents=contents,
                             config={"system_instruction": SYSTEM_PROMPT}
                         )
@@ -125,16 +126,15 @@ with tab_chat:
                         st.markdown('</div>', unsafe_allow_html=True)
                         success = True
                         break
-                    except APIError as err:
-                        if "429" in str(err) and attempt == 0:
-                            time.sleep(10)  # Wait for rate limit window to reset
-                            continue
-                        else:
-                            st.error("SeaSage is receiving high traffic right now. Please wait 10 seconds and try again.")
-                            break
                     except Exception as e:
-                        st.error(f"Error connecting to SeaSage: {e}")
-                        break
+                        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
+                            continue  # Try the next model silently
+                        else:
+                            st.error(f"Connection issue: {e}")
+                            break
+
+                if not success:
+                    st.error("Free rate limit reached across all models. Please pause for 30 seconds and click Get Guidance again.")
 
 # --- TAB 2: Marine Weather ---
 with tab_weather:
