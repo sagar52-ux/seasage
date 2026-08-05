@@ -1,9 +1,7 @@
 import os
-import time
 import requests
 import streamlit as st
 from google import genai
-from google.genai.errors import APIError
 
 # Page Configuration
 st.set_page_config(
@@ -53,7 +51,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Fetch API Key
+# Fetch API Key securely
 api_key = st.secrets.get("GEMINI_API_KEY") or os.environ.get("GEMINI_API_KEY")
 
 if not api_key:
@@ -110,31 +108,17 @@ with tab_chat:
                 if user_query:
                     contents.append(user_query)
 
-                # Models to try sequentially if rate limited
-                models_to_try = ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-1.5-pro"]
-                success = False
-
-                for model_name in models_to_try:
-                    try:
-                        response = client.models.generate_content(
-                            model=model_name,
-                            contents=contents,
-                            config={"system_instruction": SYSTEM_PROMPT}
-                        )
-                        st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
-                        st.write(response.text)
-                        st.markdown('</div>', unsafe_allow_html=True)
-                        success = True
-                        break
-                    except Exception as e:
-                        if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                            continue  # Try the next model silently
-                        else:
-                            st.error(f"Connection issue: {e}")
-                            break
-
-                if not success:
-                    st.error("Free rate limit reached across all models. Please pause for 30 seconds and click Get Guidance again.")
+                try:
+                    response = client.models.generate_content(
+                        model="gemini-2.5-flash",
+                        contents=contents,
+                        config={"system_instruction": SYSTEM_PROMPT}
+                    )
+                    st.markdown('<div class="sage-card"><div class="sage-title">🧭 SeaSage Guidance:</div>', unsafe_allow_html=True)
+                    st.write(response.text)
+                    st.markdown('</div>', unsafe_allow_html=True)
+                except Exception as e:
+                    st.error(f"Error connecting to SeaSage: {e}")
 
 # --- TAB 2: Marine Weather ---
 with tab_weather:
